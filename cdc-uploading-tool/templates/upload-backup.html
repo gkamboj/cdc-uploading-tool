@@ -1,0 +1,218 @@
+<!-- templates/upload.html -->
+{% extends 'layout.html' %}
+
+{% block content %}
+<!-- <style>
+    .table-container {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .table th,
+    .table td {
+        border: 1px solid #dee2e6;
+    }
+    /* .fixed-header-container {
+        position: sticky;
+        top: 0;
+        background-color: white;
+    } */
+
+    .sticky-header th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 1;
+    }
+</style> -->
+<div class="container mt-4">
+    <h2>Upload and Convert Excel to JSON</h2>
+    <form onsubmit="uploadAndConvert(); return false;" enctype="multipart/form-data" class="my-form">
+
+        <div class="form-group">
+            <label for="userId">UserId:<sup style="color: red;">*</sup>:</label>
+            <input type="text" class="form-control" id="userId" placeholder="Enter userId of existing configuration" required>
+        </div>
+
+        <div class="form-group">
+            <label for="file">Choose Excel file:</label>
+            <input type="file" class="form-control-file" id="file" accept=".xls, .xlsx , .csv" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Upload and Send</button>
+    </form>
+
+    <!-- <div id="data-lines" class="mt-3 data-lines-container"></div> -->
+    <div class="table-container mt-3">
+        <table class="table">
+            <thead class="sticky-header">
+                <tr>
+                    <th>#</th>
+                    <th>Data Line</th>
+                    <th>Response</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="data-table-body"></tbody>
+        </table>
+    </div>
+
+    <div id="progress" class="mt-3 progress-container">
+        <div class="progress">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="0"
+                aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <div id="status" class="mt-3 status-container"></div>
+    <div id="counts" class="mt-3 counts-container"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
+<script src="{{ url_for('static', filename='configHandler.js') }}"></script>
+<script>
+    function uploadAndConvert() {
+    var fileInput = document.getElementById('file');
+    var file = fileInput.files[0];
+    var dataLinesContainer = document.getElementById('data-lines');
+    var progressContainer = document.getElementById('progress');
+    var statusContainer = document.getElementById('status');
+    var countsContainer = document.getElementById('counts');
+    // Retrieve configuration values using the new function
+    var config = getConfig();
+    var url = config.url;
+    var apiKey = config.apiKey;
+    var secretKey = config.secretKey;
+    var userKey = config.userKey;
+
+    // Display a progress bar (you can implement a real progress bar with AJAX)
+    progressContainer.innerHTML = 'Uploading...';
+
+    // Simulate a delay to represent the file upload process
+    setTimeout(function () {
+        // Convert the file to JSON using SheetJS
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            var data = new Uint8Array(e.target.result);
+            var workbook = XLSX.read(data, { type: 'array' });
+            var jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+            // Display each data line
+            // dataLinesContainer.innerHTML = '<h4>Data Lines:</h4>';
+            jsonData.forEach(function (dataLine, index) {
+                // Display each data line on the webpage
+                // var lineElement = document.createElement('div');
+                // lineElement.textContent = JSON.stringify(dataLine);
+                // dataLinesContainer.appendChild(lineElement);
+
+                // Send data to the server for processing
+                sendDataToServer(dataLine, apiKey, secretKey, userKey, dataLinesContainer, displayResponse);  // Pass dataLinesContainer as an argument
+            });
+
+            // Display conversion status and counts
+            progressContainer.innerHTML = '';
+            statusContainer.innerHTML = 'Upload successful!';
+            countsContainer.innerHTML = 'Total records: ' + jsonData.length;
+
+            // Store JSON data in local storage
+            localStorage.setItem('jsonData', JSON.stringify(jsonData));
+
+            // You can also perform other actions or redirect to another page
+        };
+        reader.readAsArrayBuffer(file);
+    }, 2000); // Simulating a 2-second delay (replace this with your actual processing time)
+}
+
+function sendDataToServer(dataLine, apiKey, secretKey, userKey, dataLinesContainer , callback) {
+    // Prepare accountOrganization in the required format
+    var accountOrganization = {
+        "department": dataLine.department,
+        "job": dataLine.jobFunction,
+        "status": "active",
+        "roles": [dataLine.roles]  // Assuming role is a single value, adjust as needed
+    };
+
+    // Prepare profile in the required format
+    var profile = {
+        "firstName": dataLine.firstName,
+        "lastName": dataLine.lastName,
+        "locale": dataLine.language,
+        "country": dataLine.Country,
+        // "phones": [{"number": dataLine.phoneNumber}]
+        "phones": []
+    };
+
+    // Other dynamic data properties
+    // var apiKey = "4_iaxOLXqzATRFdsrBrJjpNQ";  // Replace with your actual API key
+    // var secret = "prco9ozfnb5DyupA61AUmjy8MEA85V5f";   // Replace with your actual secret key
+    // var userKey = "ANmyR/SbIl9z"; // Replace with your actual user key
+    var bpid = dataLine.bpid;
+    var email = dataLine.email;
+
+    // Prepare settings for Ajax request
+    var settings = {
+        "url": "{{ configs["app.url"] }}" + "/process-data",
+        "method": "POST",
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "body": JSON.stringify({
+            "apiKey": apiKey,
+            "secret": secretKey,
+            "userKey": userKey,
+            "bpid": bpid,
+            "email": email,
+            "accountOrganization": JSON.stringify(accountOrganization),
+            "profile": JSON.stringify(profile),
+            "sendNotification": "true"
+        })
+    };
+    console.log('Json payload:', settings.body);
+
+    // Display loading status
+    // var statusElement = document.createElement('div');
+    // statusElement.textContent = 'Sending data...';
+    // dataLinesContainer.appendChild(statusElement);
+
+    // Send data to the server using fetch or XMLHttpRequest
+    fetch(settings.url, settings)
+        .then(response => response.json())
+        .then(result => {
+            console.log('Server response:', result);
+
+            // Update the status element with the server response
+            // statusElement.textContent = 'Server Response: ' + JSON.stringify(result);
+            // Invoke the callback function to display response and status
+            callback(dataLine, result);
+        })
+        .catch(error => {
+            console.error('Error sending data to server:', error);
+
+            // Update the status element with the error message
+            // statusElement.textContent = 'Error sending data to server: ' + JSON.stringify(error);
+
+            // Log the entire response for further investigation
+            response.text().then(text => console.log('Full response:', text));
+            // Invoke the callback function to display error response and status
+            callback(dataLine, { status: 'Error', message: 'Failed to send data to server' });
+        });
+}
+
+function displayResponse(dataLine, response) {
+        // Display response and status in the table
+        var dataTableBody = document.getElementById('data-table-body');
+
+        var row = dataTableBody.insertRow();
+        var cellNumber = row.insertCell(0);
+        var cellDataLine = row.insertCell(1);
+        var cellResponse = row.insertCell(2);
+        var cellStatus = row.insertCell(3);
+
+        cellNumber.textContent = dataTableBody.rows.length; // Auto-incremented number
+        cellDataLine.textContent = JSON.stringify(dataLine);
+        cellResponse.textContent = JSON.stringify(response);
+        cellStatus.textContent = response.statusCode;
+    }
+
+</script>
+{% endblock %}

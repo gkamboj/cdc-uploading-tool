@@ -1,0 +1,100 @@
+app:
+  port: 5001
+  host: 0.0.0.0
+  url: http://localhost:5001
+
+openai:
+  key: sk-xxxxxx
+  model: gpt-3.5-turbo-0125
+  maxTokens: 600
+  temperature: 0.5
+
+translation:
+  terryin:
+    active: False
+  openai:
+    active: False
+  sap_ai:
+    active: True
+  languages:
+    - key: es
+      value: Spanish
+    - key: fr
+      value: French
+    - key: de
+      value: German
+    - key: ru
+      value: Russian
+    - key: it
+      value: Italian
+    - key: tr
+      value: Turkish
+    - key: pl
+      value: Polish
+
+cdc:
+  templates:
+    - key: importLiteAccount
+      url: /accounts.importLiteAccount
+      name: Import Lite Account
+      replacements:
+        - key: profileSchema.email
+          value: email
+      partReplacements:
+        - key: profileSchema
+          value: profile
+        - key: subscriptionsSchema
+          value: subscriptions
+        - key: dataSchema
+          value: data
+        - key: addressesSchema
+          value: addresses
+        - key: preferencesSchema
+          value: preferences
+      staticFields:
+        - prefixRegex: subscriptions.[^.]+.email
+          includePrefixField: False
+          fields:
+            - isSubscribed
+            - doubleOptIn.isExternallyVerified
+            - doubleOptIn.status
+    - key: importFullAccount
+      url: /accounts.importFullAccount
+      name: Import Full Account
+      replacements:
+        - key: profileSchema.email
+          value: email
+      partReplacements:
+        - key: profileSchema
+          value: profile
+    - key: b2bInviteMember
+      url: /accounts.b2b.inviteMember
+      name: B2B Invite Member
+      staticFields:
+        - prefix: accountOrganization
+          fields:
+            - department
+            - job
+            - status
+            - roles
+
+
+sapAI:
+  active: True
+  configs:
+    apiUrl: ''
+    appName: ''
+    clientId: ''
+    clientSecret: ''
+    identityZone: ''
+    identityZoneId: ''
+    authUrl: ''
+    resourceGroup: ''
+    llmProxy: 'aicore'
+    temperature: 0
+    embeddings:
+      deploymentId: ''
+      model: 'text-embedding-ada-002'
+  openai:
+    model: 'gpt-4'
+

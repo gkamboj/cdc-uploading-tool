@@ -1,0 +1,148 @@
+body {
+    padding-top: 56px;
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+}
+
+.my-form {
+    max-width: 400px;
+    margin: auto;
+}
+
+.progress-container {
+    display: none;
+}
+
+.status-container, .counts-container {
+    font-weight: bold;
+    color: green;
+}
+
+.table-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.table th,
+.table td {
+    border: 1px solid #dee2e6;
+}
+/* .fixed-header-container {
+    position: sticky;
+    top: 0;
+    background-color: white;
+} */
+
+.sticky-header th {
+    position: sticky;
+    top: 0;
+    background-color: #f8f9fa;
+    z-index: 1;
+    align-items: center;
+    justify-content: center;
+}
+
+.json {
+    white-space: pre-wrap;
+    font-family: monospace;
+    background-color: #f5f5f5;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.success {
+    color: green;
+}
+
+.error {
+    color: red;
+}
+
+.welcome-message {
+    padding: 20px;
+    background-color: #f8f9fa; /* Light grey background */
+    border-radius: 5px; /* Rounded corners */
+    margin-top: 20px; /* Space above the message */
+}
+
+.navbar-nav .nav-link.active {
+    font-weight: bold;
+    color: #007bff;
+}
+
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Form Elements */
+textarea, input[type="file"], select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Translate Button */
+#translateButton {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#translateButton:hover {
+    background-color: #0056b3;
+}
+
+.table tr:hover {
+    background-color: #f5f5f5;
+}
+
+.file-input-group {
+    display: flex;
+    align-items: center;
+}
+
+.file-input-group input[type="file"],
+.file-input-group button {
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1;
+    margin-right: 10px;
+}
+
+.remove-file-link {
+    color: #007bff;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.remove-file-link:hover {
+    text-decoration: underline;
+}
+
+.select-all-label {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.dropdown-menu {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.dropdown-toggle {
+    width: 200px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+

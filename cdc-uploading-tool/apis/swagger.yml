@@ -1,0 +1,254 @@
+# swagger.yml
+
+openapi: 3.0.0
+info:
+  title: "CDC Uploading Tool"
+  description: "APIs for Excel operations of CDC uploading tool"
+  version: "1.0.0"
+
+servers:
+  - url: "/"
+
+paths:
+  /:
+    get:
+      operationId: "apis.views.home"
+      tags:
+        - Home
+        - Views
+      summary: "Go to Home page"
+      responses:
+        "200":
+          description: "Successfully redirected to Home page"
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /translate:
+    get:
+      operationId: "apis.views.translate"
+      tags:
+        - Views
+      summary: "Go to Translate page"
+      responses:
+        "200":
+          description: "Successfully redirected to Translate page"
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /config:
+    get:
+      operationId: "apis.views.config"
+      tags:
+        - Views
+      summary: "Go to Configuration page"
+      responses:
+        "200":
+          description: "Successfully redirected to Configuration page"
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /create-template:
+    get:
+      operationId: "apis.views.template_creation"
+      tags:
+        - Views
+      summary: "Go to Create Template page"
+      responses:
+        "200":
+          description: "Successfully redirected to Create Template page"
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /upload:
+    get:
+      operationId: "apis.views.upload"
+      tags:
+        - Views
+      summary: "Successfully redirected to Upload page"
+      responses:
+        "200":
+          description: "Successfully redirected to Upload page"
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /cdc/get-template:
+    post:
+      operationId: "apis.actions.get_template"
+      tags:
+        - Template
+        - CDC
+      summary: "Get template fields from CDC"
+      responses:
+        "200":
+          description: ""
+
+  /create-template-file:
+    post:
+      operationId: "apis.actions.create_template_file"
+      tags:
+        - Template
+      summary: "Create and download template from selected fields"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: ""
+
+  /translate-text:
+    post:
+      operationId: "apis.actions.translate_text"
+      tags:
+        - Translate
+      summary: "Translate text to other language"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  description: Text to be translated.
+                destinationLanguage:
+                  type: string
+                  description: Destination language in which translated text is needed.
+                sourceLanguage:
+                  type: string
+                  description: Source language in which translated text is needed.
+              required:
+                - text
+                - destinationLanguage
+      responses:
+        "200":
+          description: ""
+
+  /read-file-data:
+    post:
+      operationId: "apis.actions.process_data"
+      tags:
+        - Data Processing
+      summary: "Read filled template and convert to JSON"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                configId:
+                  type: string
+                dataFile:
+                  type: string
+                  format: binary
+                  description: The data file to process (xlsx, xls, or csv).
+              required:
+                - configId
+                - dataFile
+      responses:
+        "200":
+          description: ""
+
+  /save-cdc-config:
+    post:
+      operationId: "apis.actions.save_cdc_config"
+      tags:
+        - Configuration
+        - CDC
+      summary: "Save configuration for CDC"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                apiKey:
+                  type: string
+                  description: The API key for authentication.
+                secret:
+                  type: string
+                  description: The secret key for authentication.
+                userKey:
+                  type: string
+                  description: The user key for authentication.
+                url:
+                  type: string
+                  description: Host end-point
+                configId:
+                  type: string
+                  description: The unique config id of the configuration
+              required:
+                - apiKey
+                - secret
+                - userKey
+                - url
+                - configId
+      responses:
+        "200":
+          description: ""
+
+  /cdc/send-data:
+    post:
+      operationId: "apis.actions.send_data"
+      tags:
+        - Template
+        - CDC
+      summary: "Send uploaded template data to CDC"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - configId
+                - templateId
+                - data
+              additionalProperties: True
+      responses:
+        "200":
+          description: ""
+
+  /get-saved-configs:
+    get:
+      operationId: "apis.actions.get_all_cdc_configs"
+      tags:
+        - Configuration
+        - CDC
+      summary: "Get identifier of all saved configurations"
+      responses:
+        "200":
+          description: ""
+
+  /cdc/export-response:
+    post:
+      operationId: "apis.actions.export_cdc_response"
+      tags:
+        - CDC
+      summary: "Create and download Excel file from CDC response"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: ""

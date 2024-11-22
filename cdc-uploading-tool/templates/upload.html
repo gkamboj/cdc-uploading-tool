@@ -1,0 +1,354 @@
+<!-- templates/upload.html -->
+{% extends 'layout.html' %}
+
+{% block content %}
+    <div class="container mt-4">
+        <h2>Upload and Convert Excel to JSON</h2>
+        <form enctype="multipart/form-data" class="my-form">
+
+            <div class="form-group">
+                <label for="config">Select Configuration:</label>
+                <select id="config" name="config" class="form-control">
+                </select>
+                <label for="template">Select Template:</label>
+                <select id="template" name="template" class="form-control">
+                    {% for template in configs["cdc.templates"] %}
+                        <option value="{{ template["key"] }}">{{ template["name"] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="file">Choose Excel file:</label>
+                <input type="file" class="form-control-file" id="file" accept=".xls, .xlsx , .csv" required>
+            </div>
+
+            <button type="button" id="fileUploadButton" class="btn btn-primary" disabled onclick="uploadData()">Upload
+            </button>
+            <button type="button" id="sendDataButton" class="btn btn-primary" disabled onclick="sendData()">Send Data
+            </button>
+            <button type="button" id="exportTableDataButton" class="btn btn-primary" disabled>Export
+                Data
+            </button>
+
+            <div id="uploadResponseMessage"></div>
+            <div id="sendResponseMessage"></div>
+        </form>
+
+        <div class="table-container mt-3">
+            <table class="table">
+                <thead class="sticky-header">
+                <tr>
+                    <th data-header="S.No.">S.No.</th>
+                    <th data-header="Data Line">
+                        Data Line
+                        <input type="text" id="searchRequest" onkeyup="filterTable()" placeholder="Search in Request.." style="width: 100%;">
+                    </th>
+                    <th data-header="Response">
+                        Response
+                        <input type="text" id="searchResponse" onkeyup="filterTable()" placeholder="Search in Response.." style="width: 100%;">
+                    </th>
+                    <th data-header="Status">
+                        Status
+                        <input type="text" id="searchStatus" onkeyup="filterTable()" placeholder="Search in Status.." style="width: 100%;">
+                    </th>
+                </tr>
+                </thead>
+                <tbody id="data-table-body"></tbody>
+            </table>
+        </div>
+
+        <div id="progress" class="mt-3 progress-container">
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                     aria-valuenow="0"
+                     aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="status" class="mt-3 status-container"></div>
+        <div id="counts" class="mt-3 counts-container"></div>
+    </div>
+
+    <script>
+        function toggleUploadButton() {
+            var configId = document.getElementById("config").value;
+            var file = document.getElementById("file").files[0];
+            var uploadButton = document.getElementById("fileUploadButton");
+
+            if (configId && file) {
+                uploadButton.disabled = false;
+            } else {
+                uploadButton.disabled = true;
+            }
+        }
+
+        document.getElementById("config").addEventListener("input", toggleUploadButton);
+        document.getElementById("file").addEventListener("change", toggleUploadButton);
+
+
+        function uploadData() {
+            var formData = new FormData();
+            var configId = document.getElementById('config').value;
+            var templateId = document.getElementById('template').value;
+            var dataFile = document.getElementById("file").files[0];
+            formData.append("configId", configId);
+            formData.append("templateId", templateId);
+            formData.append("dataFile", dataFile);
+
+            var settings = {
+                "method": "POST",
+                "url": "{{ configs["app.url"] }}" + "/read-file-data",
+                "headers": {
+                    "Accept": "*/*"
+                },
+                "body": formData
+            };
+
+            fetch(settings.url, settings)
+                .then(response => response.json())
+                .then(data => {
+                    setMessage(data.message, data.success)
+                    if (data.success) {
+                        toggleFormDisableStatus(true)
+                        window.sessionStorage.setItem('resultData', JSON.stringify(data.result));
+                        window.sessionStorage.setItem('configId', configId)
+                        window.sessionStorage.setItem('templateId', templateId)
+                        var dataTableBody = document.getElementById('data-table-body');
+                        dataTableBody.innerHTML = ''; // Clear existing rows
+                        data.result.forEach((rowData, index) => {
+                            var row = dataTableBody.insertRow();
+                            var cellNumber = row.insertCell(0);
+                            var cellDataLine = row.insertCell(1);
+                            var cellResponse = row.insertCell(2);
+                            var cellStatus = row.insertCell(3);
+
+                            cellNumber.textContent = index + 1;
+                            cellDataLine.innerHTML = '<pre class="json">' + JSON.stringify(rowData, null, 2) + '</pre>';
+                        });
+                    } else {
+                        toggleFormDisableStatus(false)
+                    }
+                }).catch(error => {
+                console.error("Error:", error);
+                toggleFormDisableStatus(false)
+            });
+        }
+
+
+        function sendData() {
+            var resultData = JSON.parse(window.sessionStorage.getItem('resultData'));
+            var configId = window.sessionStorage.getItem('configId')
+            var templateId = window.sessionStorage.getItem('templateId')
+            setMessage('', true)
+            console.log("Result data is " + JSON.stringify(resultData))
+            document.getElementById("sendDataButton").disabled = true;
+            document.getElementById("exportTableDataButton").disabled = false;
+            resultData.forEach(rowData => {
+                sendRowDataToCDC(configId, rowData, templateId, displayResponse);
+            });
+        }
+
+
+        function sendRowDataToCDC(configId, rowData, templateId, displayResponse) {
+            var requestData = {
+                configId: configId,
+                templateId: templateId,
+                data: rowData,
+            };
+            var settings = {
+                "method": "POST",
+                "url": "{{ configs["app.url"] }}" + "/cdc/send-data",
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify(requestData)
+            };
+
+            fetch(settings.url, settings)
+                .then(response => response.json())
+                .then(result => {
+                    console.log("Item data sent successfully:", result);
+                    displayResponse(rowData, result);
+                })
+                .catch(error => {
+                    console.error("Error sending item data:", error);
+                    displayResponse(rowData, {status: 'Error', message: 'Failed to send data to server: ' + error});
+                });
+        }
+
+
+        function displayResponse(dataLine, response) {
+            var dataTableBody = document.getElementById('data-table-body');
+            var rows = dataTableBody.rows;
+
+            // Find the corresponding row and update the response and status cells
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var rowDataLine = JSON.parse(row.cells[1].querySelector('pre.json').textContent);
+                if (JSON.stringify(rowDataLine) === JSON.stringify(dataLine)) {
+                    var cellResponse = row.cells[2];
+                    var cellStatus = row.cells[3];
+                    var statusClass = response.success ? 'success' : 'error';
+
+                    if (response.result != null && Object.keys(response.result).length > 0) {
+                        cellResponse.innerHTML = '<pre class="json">' + JSON.stringify(response.result, null, 2) + '</pre>';
+                    } else {
+                        cellResponse.textContent = response.message;
+                    }
+                    cellStatus.textContent = response.statusCode;
+                    cellStatus.className = statusClass;
+                    break;
+                }
+            }
+        }
+
+
+        function toggleFormDisableStatus(disable) {
+            document.getElementById("config").disabled = disable;
+            document.getElementById("template").disabled = disable;
+            document.getElementById("file").disabled = disable;
+            document.getElementById("fileUploadButton").disabled = disable;
+            document.getElementById("sendDataButton").disabled = !disable;
+        }
+
+        function populateConfigDropdown() {
+            fetchConfigurations()
+                .then(configurations => {
+                    var selectElement = document.getElementById('config');
+                    selectElement.innerHTML = '';
+                    configurations.forEach(function (config) {
+                        var option = document.createElement('option');
+                        option.value = config;
+                        option.textContent = config;
+                        selectElement.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching configurations:', error);
+                });
+        }
+
+        function fetchConfigurations() {
+            var settings = {
+                "url": "{{ configs["app.url"] }}" + "/get-saved-configs",  // Replace with your server URL
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            };
+            return fetch(settings.url, settings)
+                .then(response => response.json())
+                .then(data => {
+                    return data.result;
+                })
+                .catch(error => {
+                    console.error('Error fetching configurations:', error);
+                    throw error;
+                });
+        }
+
+        function collectDataForDownload() {
+            var headers = [];
+            var data = [];
+
+            var headerRow = document.querySelector('.sticky-header');
+            headerRow.querySelectorAll('th').forEach(function (header) {
+                headers.push(header.getAttribute('data-header'));
+            });
+
+            var dataTableBody = document.getElementById('data-table-body');
+            var rows = dataTableBody.rows;
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var rowData = [];
+                if (row.style.display === "none") continue;
+                rowData.push(JSON.parse(row.cells[0].textContent));
+                rowData.push(JSON.parse(row.cells[1].querySelector('pre.json').textContent));
+                var responseCellData = ''
+                try {
+                    responseCellData = JSON.parse(row.cells[2].querySelector('pre.json').textContent);
+                } catch (error) {
+                    responseCellData = row.cells[2].textContent;
+                }
+                rowData.push(responseCellData)
+                rowData.push(row.cells[3].textContent);
+                data.push(rowData);
+            }
+
+            return {
+                headers: headers,
+                data: data
+            };
+        }
+
+        function downloadData() {
+            var allData = collectDataForDownload();
+            var settings = {
+                "method": "POST",
+                "url": "{{ configs["app.url"] }}" + "/cdc/export-response",
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify(allData)
+            };
+
+            fetch(settings.url, settings)
+                .then(response => response.blob())
+                .then(blob => {
+                    setMessage('Data export successful', true)
+                    var url = window.URL.createObjectURL(blob);
+                    var link = document.createElement("a");
+                    link.href = url;
+                    link.setAttribute("download", "data.xlsx");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }).catch(error => {
+                setMessage('Unable to export data, please try again later', false)
+                console.error('Error while exporting CDC upload response data:', error);
+            });
+
+        }
+
+        function setMessage(responseMessage, responseStatus) {
+            var responseMessageElement = document.getElementById('uploadResponseMessage');
+            responseMessageElement.textContent = responseMessage;
+            responseMessageElement.style.display = 'block';
+            responseMessageElement.style.color = responseStatus ? 'green' : 'red';
+        }
+
+        function filterTable() {
+            var requestFilter = document.getElementById("searchRequest").value.toUpperCase();
+            var responseFilter = document.getElementById("searchResponse").value.toUpperCase();
+            var statusFilter = document.getElementById("searchStatus").value.toUpperCase();
+            var table = document.getElementById("data-table-body");
+            var tr = table.getElementsByTagName("tr");
+
+            for (var i = 0; i < tr.length; i++) {
+                var td = tr[i].getElementsByTagName("td");
+                var requestMatch = !requestFilter || (td[1] && td[1].textContent.toUpperCase().indexOf(requestFilter) > -1);
+                var responseMatch = !responseFilter || (td[2] && td[2].textContent.toUpperCase().indexOf(responseFilter) > -1);
+                var statusMatch = !statusFilter || (td[3] && td[3].textContent.toUpperCase().indexOf(statusFilter) > -1);
+
+                console.log('Row %s has (filter, value) -> requestMatch (%s, %s), responseMatch (%s, %s), statusMatch (%s, %s)',
+                            i, requestFilter, requestMatch, responseFilter, responseMatch, statusFilter, statusMatch)
+
+                if (requestMatch && responseMatch && statusMatch) {
+                    tr[i].style.display = "";
+                } else {
+                    tr[i].style.display = "none";
+                }
+            }
+        }
+
+
+
+        document.getElementById('exportTableDataButton').addEventListener('click', function () {
+            downloadData();
+        });
+
+        populateConfigDropdown();
+
+    </script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+{% endblock %}

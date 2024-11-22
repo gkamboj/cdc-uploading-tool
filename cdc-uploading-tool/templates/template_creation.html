@@ -1,0 +1,408 @@
+<!-- templates/upload.html -->
+{% extends 'layout.html' %}
+
+{% block content %}
+    <style>
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* Styles for the tables */
+        .table-container {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .left-table,
+        .right-table {
+            width: 45%;
+            margin-top: 20px;
+        }
+
+        .table-title {
+            font-weight: bold;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            background-color: #f8f9fa;
+            z-index: 1; /* Ensure the titles appear above other content */
+        }
+
+        .table-data {
+            width: 100%;
+            border-collapse: collapse;
+            border: 2px solid #007bff;
+        }
+
+        .table-data th,
+        .table-data td {
+            border: 1px solid #007bff;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .table-data th {
+            background-color: #007bff;
+            color: #fff;
+        }
+
+        .table-data td {
+            background-color: #f8f9fa;
+        }
+
+        .add-remove-btn {
+            display: block;
+            margin: 10px auto;
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .add-remove-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+
+    <div class="container mt-4">
+        <h1>Select Template and Generate Excel CSV</h1>
+        <form id="template-form" class="my-form">
+            <div class="form-group">
+                <label for="config">Select Configuration:</label>
+                <select id="config" name="config" class="form-control">
+                </select>
+                <label for="template">Select Template:</label>
+                <select id="template" name="template" class="form-control">
+                    {% for template in configs["cdc.templates"] %}
+                        <option value="{{ template["key"] }}">{{ template["name"] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="button" id="get-template-btn" class="btn btn-primary">Get Template</button>
+            <button type="button" id="generate-csv-btn" class="btn btn-primary" disabled>Generate CSV</button>
+
+            <div id="responseMessage"></div>
+        </form>
+
+        <div id="template-output" class="mt-3"></div>
+
+        <div class="table-container mt-3">
+            <!-- Left table with search input -->
+            <table class="left-table">
+                <caption class="table-title">Available Fields</caption>
+                <thead>
+                <tr>
+                    <th colspan="3">
+                        <input type="text" id="left-search-input" class="form-control" placeholder="Search...">
+                    </th>
+                </tr>
+                <tr>
+                    <th>Field Name</th>
+                    <th>Type</th>
+                    <th>Add</th>
+                </tr>
+                </thead>
+                <tbody id="left-table-body"></tbody>
+            </table>
+
+            <!-- Right table with search input -->
+            <table class="right-table">
+                <caption class="table-title">Selected Fields</caption>
+                <thead>
+                <tr>
+                    <th colspan="3">
+                        <input type="text" id="right-search-input" class="form-control" placeholder="Search...">
+                    </th>
+                </tr>
+                <tr>
+                    <th>Field Name</th>
+                    <th>Type</th>
+                    <th>Remove</th>
+                </tr>
+                </thead>
+                <tbody id="right-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <script>
+        document.getElementById('get-template-btn').addEventListener('click', function () {
+            var config = document.getElementById('config');
+            fetchTemplate(config.value);
+        });
+
+        function populateConfigDropdown() {
+            fetchConfigurations()
+                .then(configurations => {
+                    var selectElement = document.getElementById('config');
+                    selectElement.innerHTML = '';
+                    configurations.forEach(function(config) {
+                        var option = document.createElement('option');
+                        option.value = config;
+                        option.textContent = config;
+                        selectElement.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching configurations:', error);
+                });
+        }
+
+        function fetchConfigurations() {
+            var settings = {
+                "url": "{{ configs["app.url"] }}" + "/get-saved-configs",  // Replace with your server URL
+                "headers": {
+                    "Content-Type": "application/json"
+                }
+            };
+            return fetch(settings.url, settings)
+                .then(response => response.json())
+                .then(data => {
+                    return data.result;
+                })
+                .catch(error => {
+                    console.error('Error fetching configurations:', error);
+                    throw error;
+                });
+        }
+
+        function fetchTemplate(config) {
+            var settings = {
+                "method": "POST",
+                "url": "{{ configs["app.url"] }}" + "/cdc/get-template",  // Replace with your server URL
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify({
+                    "configId": config
+                })
+            };
+
+            fetch(settings.url, settings)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Server response:', data);
+                    setMessage(data.message, data.success)
+
+                    if (data.success) {
+                        toggleFormDisableStatus(true)
+                        // Display data in the left table
+                        var leftTableBody = document.getElementById('left-table-body');
+                        var schemas = ['profileSchema', 'addressesSchema', 'dataSchema', 'preferencesSchema', 'subscriptionsSchema'];
+
+                        schemas.forEach(function (schemaName) {
+                            var fields = data['result'][schemaName].fields;
+                            for (var field in fields) {
+                                if (fields.hasOwnProperty(field)) {
+                                    var row = leftTableBody.insertRow();
+                                    var cell1 = row.insertCell(0);
+                                    var cell2 = row.insertCell(1);
+                                    var cell3 = row.insertCell(2);
+
+                                    // Check if the current schema is subscriptionsSchema
+                                    if (schemaName === 'subscriptionsSchema') {
+                                        // Use custom logic to handle nested fields
+                                        cell1.textContent = getSubscriptionFieldPath(field, fields[field]);
+                                    } else {
+                                        // Fall back to existing logic for other schemas
+                                        cell1.textContent = schemaName + '.' + field;
+                                    }
+
+                                    cell2.textContent = fields[field].type;
+                                    var addButton = document.createElement('button');
+                                    addButton.textContent = 'Add';
+                                    addButton.classList.add('add-remove-btn');
+                                    cell3.appendChild(addButton);
+                                }
+                            }
+                        });
+
+                        function getSubscriptionFieldPath(fieldName, field) {
+                            // Initialize the path with the field name
+                            var path = 'subscriptionsSchema.' + fieldName;
+
+                            // Check if the field has nested properties
+                            if (typeof field === 'object' && field !== null) {
+                                // Iterate over nested keys and append them to the path
+                                for (var key in field) {
+                                    if (key !== 'type') {
+                                        path += '.' + key;
+                                    }
+                                }
+                            }
+
+                            return path;
+                        }
+
+                        // Attach event listener to Add buttons
+                        var addButtons = document.querySelectorAll('.left-table .add-remove-btn');
+                        addButtons.forEach(function (button) {
+                            button.addEventListener('click', function () {
+                                var row = this.parentNode.parentNode;
+                                moveField(row, leftTableBody, document.getElementById('right-table-body'));
+                                document.getElementById("generate-csv-btn").disabled = false;
+                            });
+                        });
+                    } else {
+                        toggleFormDisableStatus(false)
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching template:', error);
+                });
+        }
+
+        function toggleFormDisableStatus(disable) {
+            document.getElementById("get-template-btn").disabled = disable;
+            document.getElementById("generate-csv-btn").disabled = true;
+            document.getElementById("config").disabled = disable;
+            document.getElementById("template").disabled = disable;
+        }
+
+        function moveField(row, fromTable, toTable) {
+            // Get the field name from the row
+            var fieldName = row.cells[0].textContent;
+
+            // Check if the field already exists in the destination table
+            var exists = Array.from(toTable.rows).some(function (existingRow) {
+                return existingRow.cells[0].textContent === fieldName;
+            });
+
+            // Only move the field if it doesn't already exist in the destination table
+            if (!exists) {
+                // Clone the row and append it to the target table
+                var clonedRow = row.cloneNode(true);
+                var addButton = document.createElement('button');
+                addButton.textContent = fromTable.id === 'left-table-body' ? 'Remove' : 'Add'; // Change button text based on source table
+                addButton.classList.add('add-remove-btn');
+                addButton.addEventListener('click', fromTable.id === 'left-table-body'
+                    ? createRemoveHandler(clonedRow)
+                    : createAddHandler(clonedRow)); // Attach appropriate event handler
+                clonedRow.cells[2].innerHTML = ''; // Clear existing buttons
+                clonedRow.cells[2].appendChild(addButton);
+                toTable.appendChild(clonedRow);
+
+                // Remove the original row from the source table
+                fromTable.removeChild(row);
+            }
+        }
+
+        function createAddHandler(row) {
+            return function () {
+                moveField(row, document.getElementById('left-table-body'), document.getElementById('right-table-body'));
+            }
+        }
+
+        function createRemoveHandler(row) {
+            return function () {
+                var rightTableBody = document.getElementById('right-table-body');
+                moveField(row, rightTableBody, document.getElementById('left-table-body'));
+                if (rightTableBody.getElementsByTagName('tr').length === 0) {
+                    // If no fields are left, disable the "Generate CSV" button
+                    document.getElementById("generate-csv-btn").disabled = true;
+                }
+            }
+        }
+
+        // Search functionality for left table
+        document.getElementById('left-search-input').addEventListener('input', function () {
+            searchTable('left-table-body', this.value);
+        });
+
+        // Search functionality for right table
+        document.getElementById('right-search-input').addEventListener('input', function () {
+            searchTable('right-table-body', this.value);
+        });
+
+        function searchTable(tableId, searchText) {
+            var tableBody = document.getElementById(tableId);
+            var rows = tableBody.getElementsByTagName('tr');
+
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var cells = row.getElementsByTagName('td');
+                var found = false;
+
+                for (var j = 0; j < cells.length; j++) {
+                    var cell = cells[j];
+                    if (cell.textContent.toLowerCase().includes(searchText.toLowerCase())) {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (found) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        }
+
+        document.getElementById('generate-csv-btn').addEventListener('click', function () {
+            var template = document.getElementById('template').value;
+            var config = document.getElementById('config').value;
+            generateCSV(template, config);
+        });
+
+        function generateCSV(template, config) {
+            var selectedFields = [];
+            var rightTableBody = document.getElementById('right-table-body');
+            var rows = rightTableBody.getElementsByTagName('tr');
+
+            // Iterate over rows in the right table to collect selected fields
+            for (var i = 0; i < rows.length; i++) {
+                var fieldName = rows[i].cells[0].textContent;
+                selectedFields.push(fieldName);
+            }
+
+            var settings = {
+                "method": "POST",
+                "url": "{{ configs["app.url"] }}" + "/create-template-file",
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": JSON.stringify({
+                    "selectedFields": selectedFields,
+                    "templateId": template,
+                    "configId": config
+                })
+            };
+
+            fetch(settings.url, settings)
+                .then(response => response.blob())
+                .then(blob => {
+                    setMessage('Template download successful', true)
+                    var url = window.URL.createObjectURL(blob);
+                    var link = document.createElement("a");
+                    link.href = url;
+                    link.setAttribute("download", template + '_' + config + "_template.xlsx");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }).catch(error => {
+
+                    setMessage('Unable to download template, please try again later', false)
+                    console.error('Error while creating template from selected fields:', error);
+            });
+
+        }
+
+        populateConfigDropdown();
+
+        function setMessage(responseMessage, responseStatus) {
+            var responseMessageElement = document.getElementById('responseMessage');
+            responseMessageElement.textContent = responseMessage;
+            responseMessageElement.style.display = 'block';
+            responseMessageElement.style.color = responseStatus ? 'green' : 'red';
+        }
+
+    </script>
+
+
+{% endblock %}

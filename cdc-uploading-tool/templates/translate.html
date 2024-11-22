@@ -1,0 +1,263 @@
+<!-- templates/translate.html -->
+{% extends 'layout.html' %}
+
+{% block content %}
+    <div class="container mt-4">
+
+        <h1>Language Translation</h1>
+
+        <label for="inputText">Enter text to translate or upload HTML file:</label>
+        <textarea id="inputText" rows="4" cols="50"></textarea>
+        <br>
+        <label for="fileInput">Upload HTML File:</label>
+        <div class="file-input-group">
+            <input type="file" id="fileInput" accept=".html, .htm"/>
+            <a href="#" id="removeFileLink" class="remove-file-link">Remove File</a>
+        </div>
+        <br>
+        <label for="targetLanguages">Select target languages:</label>
+        <div class="dropdown">
+            <button class="btn btn-secondary dropdown-toggle" type="button" id="targetLanguagesDropdown"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                Select languages
+            </button>
+            <div class="dropdown-menu" id="languageDropdownMenu" aria-labelledby="targetLanguagesDropdown">
+                <!-- <div class="dropdown-item">
+                    <div class="form-check">
+                        <input type="checkbox" id="selectAllCheckbox" class="form-check-input">
+                        <label for="selectAllCheckbox" class="form-check-label select-all-label">Select all</label>
+                    </div>
+                </div> -->
+                {% for language in configs["translation.languages"]|sort(attribute='value') %}
+                    <div class="dropdown-item">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="language-{{ language['key'] }}"
+                                   value="{{ language['key'] }}">
+                            <label class="form-check-label"
+                                   for="language-{{ language['key'] }}">{{ language['value'] }}</label>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <br><br>
+        <div style="text-align: center;">
+            <button id="translateButton" class="btn btn-primary" disabled>Translate</button>
+        </div>
+
+        <h2>Translations:</h2>
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Language</th>
+                <th>Translated Content</th>
+                <th>Preview</th>
+            </tr>
+            </thead>
+            <tbody id="translationsBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        function initTranslation() {
+            const languageCheckboxes = document.querySelectorAll('.dropdown-menu .form-check-input');
+
+            /* const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const languageCheckboxes = document.querySelectorAll('.dropdown-menu .form-check-input:not(#selectAllCheckbox)');
+
+            selectAllCheckbox.addEventListener('change', function () {
+                languageCheckboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+            });
+
+            languageCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function () {
+                    selectAllCheckbox.checked = Array.from(languageCheckboxes).every(checkbox => checkbox.checked);
+                });
+            }); */
+
+            async function translateWithoutWait() {
+                const inputText = await getInputText();
+                const translationsBody = document.getElementById('translationsBody');
+                translationsBody.innerHTML = '';
+
+                const targetLanguages = Array.from(document.querySelectorAll('.dropdown-menu .form-check-input:checked:not(#selectAllCheckbox)'), checkbox => checkbox.value);
+
+                if (inputText && targetLanguages.length > 0) {
+                    try {
+                        // Initiate all translation requests simultaneously
+                        const translationPromises = targetLanguages.map(language => {
+                            const languageName = Array.from(languageCheckboxes).find(checkbox => checkbox.value === language).labels[0].textContent;
+                            return getTranslation(inputText, language).then(translation => ({
+                                languageName,
+                                translation
+                            }));
+                        });
+
+                        // Process each promise as it resolves
+                        for (const translationPromise of translationPromises) {
+                            const {languageName, translation} = await translationPromise;
+                            if (translation) {
+                                const row = translationsBody.insertRow();
+                                const cellLanguage = row.insertCell(0);
+                                const cellTranslatedContent = row.insertCell(1);
+                                const cellPreview = row.insertCell(2);
+                                cellLanguage.innerText = languageName;
+                                cellTranslatedContent.innerText = translation;
+                                const previewButton = document.createElement('button');
+                                previewButton.innerText = 'Preview';
+                                previewButton.onclick = function () {
+                                    previewContent(translation);
+                                };
+                                cellPreview.appendChild(previewButton);
+                            } else {
+                                console.error(`Translation for ${languageName} returned empty result.`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Translation error:', error);
+                    }
+                } else {
+                    alert('Please enter text or upload an HTML file and select at least one target language.');
+                }
+            }
+
+            async function translateWithWait() {
+                const inputText = await getInputText();
+                const translationsBody = document.getElementById('translationsBody');
+                translationsBody.innerHTML = '';
+
+                const targetLanguages = Array.from(document.querySelectorAll('.dropdown-menu .form-check-input:checked:not(#selectAllCheckbox)'), checkbox => checkbox.value);
+
+                if (inputText && targetLanguages.length > 0) {
+                    try {
+                        for (const language of targetLanguages) {
+                            const languageName = Array.from(languageCheckboxes).find(checkbox => checkbox.value === language).labels[0].textContent;
+                            const translation = await getTranslation(inputText, language);
+                            if (translation) {
+                                const row = translationsBody.insertRow();
+                                const cellLanguage = row.insertCell(0);
+                                const cellTranslatedContent = row.insertCell(1);
+                                const cellPreview = row.insertCell(2);
+                                cellLanguage.innerText = languageName;
+                                cellTranslatedContent.innerText = translation;
+                                const previewButton = document.createElement('button');
+                                previewButton.innerText = 'Preview';
+                                previewButton.onclick = function () {
+                                    previewContent(translation);
+                                };
+                                cellPreview.appendChild(previewButton);
+                            } else {
+                                console.error(`Translation for ${language} returned empty result.`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Translation error:', error);
+                    }
+                } else {
+                    alert('Please enter text or upload an HTML file and select at least one target language.');
+                }
+            }
+
+            async function getInputText() {
+                const textareaContent = document.getElementById('inputText').value;
+                const fileInput = document.getElementById('fileInput').files[0];
+
+                if (fileInput) {
+                    return await readFile(fileInput);
+                } else {
+                    return textareaContent;
+                }
+            }
+
+            async function readFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => resolve(event.target.result);
+                    reader.onerror = (error) => reject(error);
+                    reader.readAsText(file);
+                });
+            }
+
+            async function getTranslation(text, targetLanguage) {
+                var translatedText = ""
+                var requestData = {
+                    text: text,
+                    destinationLanguage: targetLanguage,
+                    sourceLanguage: "en"
+                };
+                var settings = {
+                    "method": "POST",
+                    "url": "{{ configs["app.url"] }}" + "/translate-text",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": JSON.stringify(requestData)
+                };
+                const response = await fetch(settings.url, settings);
+                const data = await response.json();
+                if (data.success) {
+                    translatedText = data['result']['translated_text']
+                } else {
+                    alert(data.message)
+                }
+                console.log('Translated text is ' + translatedText)
+                return translatedText
+            }
+
+            window.previewContent = function (content) {
+                const previewWindow = window.open('', '_blank');
+                previewWindow.document.write(content);
+                previewWindow.document.close();
+            };
+
+            document.getElementById('translateButton').addEventListener('click', translateWithoutWait);
+            {#document.getElementById('translateButton').addEventListener('click', translateWithWait);#}
+        }
+
+
+        document.getElementById('inputText').addEventListener('input', function () {
+            const hasText = this.value.trim().length > 0; // Check if the textarea has non-whitespace content
+            document.getElementById('translateButton').disabled =!hasText;
+            document.getElementById('fileInput').disabled = hasText;
+        });
+
+        document.getElementById('fileInput').addEventListener('change', function () {
+            document.getElementById('inputText').disabled = this.files.length > 0;
+            document.getElementById('translateButton').disabled = this.files.length === 0;
+        });
+
+        document.getElementById('translateButton').addEventListener('click', function () {
+            this.disabled = true;
+            translate().then(() => {
+                this.disabled = false;
+            });
+        });
+
+        document.getElementById('removeFileLink').addEventListener('click', function (event) {
+            event.preventDefault();
+            document.getElementById('fileInput').value = '';
+            document.getElementById('inputText').disabled = false;
+        });
+
+        function updateDropdownLabel() {
+            const selectedLanguages = Array.from(document.querySelectorAll('.dropdown-menu .form-check-input:checked:not(#selectAllCheckbox)'));
+            const dropdownLabel = document.getElementById('targetLanguagesDropdown');
+            if (selectedLanguages.length === 0) {
+                dropdownLabel.textContent = 'Select languages';
+            } else {
+                const languageNames = selectedLanguages.slice(0, 3).map(checkbox => checkbox.labels[0].textContent).join(', ');
+                const extraLanguagesCount = selectedLanguages.length - 3;
+                dropdownLabel.textContent = extraLanguagesCount > 0 ? `${languageNames} +${extraLanguagesCount}` : languageNames;
+            }
+        }
+
+        document.querySelectorAll('.dropdown-menu .form-check-input').forEach(checkbox => {
+            checkbox.addEventListener('change', updateDropdownLabel);
+        });
+
+        initTranslation();
+        updateDropdownLabel();
+    </script>
+{% endblock %}
